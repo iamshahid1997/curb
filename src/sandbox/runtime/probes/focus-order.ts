@@ -21,6 +21,7 @@
 
 import axe from "axe-core";
 import {
+  assertLayoutAvailable,
   hasClickHandler,
   hasKeyboardHandler,
   isNativelyInteractive,
@@ -263,9 +264,42 @@ function openModal(root: ParentNode): HTMLElement | null {
 /* -------------------------------------------------------------------------- */
 
 export function traceFocusOrder(root: HTMLElement, maxTabs = 40): FocusOrderResult {
+  // Focusability is decided partly on geometry, so a frame with no layout would
+  // report every control as unreachable. Refuse rather than lie.
+  assertLayoutAvailable();
+
   const notes: string[] = [];
+
+  const candidates = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
   const staticOrder = computeFocusOrder(root);
-  const domOrder = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+  const domOrder = candidates;
+
+  // An empty focus order on a component that clearly has controls is a probe
+  // failure, not a finding — say so rather than silently reporting "nothing
+  // focusable" and letting the agent conclude the component is fine.
+  if (candidates.length > 0 && staticOrder.length === 0) {
+    const why = candidates.map((el) => {
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return (
+        `${el.tagName.toLowerCase()}: display=${style.display} ` +
+        `visibility=${style.visibility} rect=${Math.round(rect.width)}x${Math.round(rect.height)} ` +
+        `tabindex=${el.getAttribute("tabindex") ?? "none"} disabled=${el.hasAttribute("disabled")}`
+      );
+    });
+    notes.push(
+      `PROBE ANOMALY: ${candidates.length} focusable candidate(s) were all filtered out — ` +
+        `treat this as a probe failure, not as "no keyboard issues". ` +
+        why.join(" | "),
+    );
+  }
+
+  if (candidates.length === 0) {
+    notes.push(
+      `PROBE ANOMALY: no focusable candidates matched inside <${root.tagName.toLowerCase()}` +
+        `${root.id ? `#${root.id}` : ""}>, which contains ${root.querySelectorAll("*").length} element(s).`,
+    );
+  }
 
   const positiveTabindexCount = staticOrder.filter((el) => (tabindexOf(el) ?? 0) > 0).length;
 

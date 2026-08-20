@@ -135,6 +135,8 @@ export interface PingResult {
 /* -------------------------------------------------------------------------- */
 
 export interface SandboxError {
+  /** Error class name, preserved so the host can branch on it. */
+  name?: string;
   message: string;
   stack?: string;
   /** Set when the failure was a compile error rather than a runtime one. */

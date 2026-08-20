@@ -144,6 +144,45 @@ export function countNodes(root: Element | null): number {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Layout availability                                                        */
+/* -------------------------------------------------------------------------- */
+
+export class ProbeUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProbeUnavailableError";
+  }
+}
+
+/**
+ * Any probe that reasons about geometry must call this first.
+ *
+ * When the containing tab is backgrounded or the frame is not being painted,
+ * the browser stops laying the document out: `visibilityState` becomes
+ * "hidden" and every getBoundingClientRect returns 0x0 — including on elements
+ * that are perfectly visible when the tab is foregrounded.
+ *
+ * Silently continuing is the dangerous option. Every focusable element gets
+ * filtered out as "zero-sized", the probe reports "nothing focusable", and the
+ * agent reads that as "this component has no keyboard problems" — a confident
+ * false negative produced by a backgrounded tab. Refusing to answer is the only
+ * safe behaviour.
+ */
+export function assertLayoutAvailable(): void {
+  const hasLayout =
+    document.documentElement.clientWidth > 0 || document.documentElement.clientHeight > 0;
+
+  if (hasLayout) return;
+
+  throw new ProbeUnavailableError(
+    "The sandbox has no layout, so geometry-dependent checks cannot run " +
+      `(visibilityState="${document.visibilityState}"). This happens when the tab is ` +
+      "in the background or the panel is hidden. Bring the page to the foreground and " +
+      "re-run — results from a frame with no layout would be false negatives.",
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* React handler detection                                                    */
 /* -------------------------------------------------------------------------- */
 

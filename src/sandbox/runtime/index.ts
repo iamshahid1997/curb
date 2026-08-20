@@ -424,10 +424,15 @@ function reply(message: ResponseEnvelope): void {
 
 function toSandboxError(err: unknown): SandboxError {
   if (err instanceof CompileError) {
-    return { message: err.message, stack: err.stack, diagnostics: err.diagnostics };
+    return {
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      diagnostics: err.diagnostics,
+    };
   }
   const e = err as Error;
-  return { message: e?.message ?? String(err), stack: e?.stack };
+  return { name: e?.name, message: e?.message ?? String(err), stack: e?.stack };
 }
 
 window.addEventListener("message", (event: MessageEvent) => {

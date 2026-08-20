@@ -12,11 +12,14 @@
     "watch:sandbox": "node scripts/build-sandbox.mjs --watch"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.47",
     "@babel/standalone": "^8.0.4",
+    "ai": "^7.0.70",
     "axe-core": "^4.13.0",
     "next": "16.3.1",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
