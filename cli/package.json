@@ -1,0 +1,17 @@
+{
+  "name": "curb-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "curb": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "spike": "node --experimental-strip-types src/spike.ts"
+  },
+  "dependencies": {
+    "@jridgewell/trace-mapping": "^0.3.31",
+    "playwright": "^1.62.1"
+  }
+}
