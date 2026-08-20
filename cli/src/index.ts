@@ -55,10 +55,12 @@ interface Args {
   headed: boolean;
   json?: string;
   help: boolean;
+  /** Run the deterministic oracle only — no model, no key, no quota. */
+  probeOnly: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { fix: false, headed: false, help: false };
+  const args: Args = { fix: false, headed: false, help: false, probeOnly: false };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -69,6 +71,7 @@ function parseArgs(argv: string[]): Args {
       case "--port": args.port = Number(next()); break;
       case "--routes": args.routes = next()?.split(",").map((r) => r.trim()).filter(Boolean); break;
       case "--fix": args.fix = true; break;
+      case "--probe-only": args.probeOnly = true; break;
       case "--headed": args.headed = true; break;
       case "--json": args.json = next(); break;
       case "-h":
@@ -92,12 +95,18 @@ ${bold("Options")}
   --port <n>         Port to start or look for the dev server on
   --routes /a,/b     Only these routes (default: discovered from the filesystem)
   --fix              Allow writing patches. Off by default.
+  --probe-only       Run the deterministic checks only. No model, no API key.
   --headed           Show the browser while it works
   --json <path>      Write the full report as JSON
   -h, --help         This
 
 ${bold("Notes")}
-  Needs GOOGLE_GENERATIVE_AI_API_KEY. Free key: https://aistudio.google.com/apikey
+  --probe-only needs no key at all: axe-core, the accessibility tree, the
+  screen-reader transcript, focus tracing, real Core Web Vitals and source
+  mapping are all deterministic. Only judgement and patching call a model.
+
+  For the full audit set GOOGLE_GENERATIVE_AI_API_KEY.
+  Free key: https://aistudio.google.com/apikey
   Every patch is verified by re-probing every audited route. Anything that
   regresses is rolled back to the original file before you are told about it.
   Measurements come from the dev server and are inflated; treat them as relative.
@@ -217,6 +226,163 @@ function renderReport(result: AuditResult, args: Args): void {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Probe-only                                                                 */
+/* -------------------------------------------------------------------------- */
+
+interface ProbeSummary {
+  route: string;
+  axeTotal: number;
+  axeCritical: number;
+  axeRules: string[];
+  tabStops: number;
+  unreachable: Array<{ selector: string; reason: string; source: string | null }>;
+  flaggedNames: Array<{ text: string; issue: string }>;
+  notes: string[];
+  lcp: number | null;
+  cls: number;
+  longTasks: number;
+  rootCauses: Array<{ origin: string; count: number }>;
+}
+
+/**
+ * Everything the deterministic oracle can establish, with no model involved.
+ *
+ * Worth having as a real mode rather than a demo affordance: it needs no API
+ * key, spends no quota, runs in seconds, and is the half of the tool whose
+ * answers are reproducible. The agent adds judgement on top of exactly this.
+ */
+async function probeOnly(
+  driver: PageDriver,
+  baseUrl: string,
+  routes: string[],
+  projectRoot: string,
+): Promise<ProbeSummary[]> {
+  const summaries: ProbeSummary[] = [];
+
+  for (const route of routes) {
+    process.stdout.write(`${dim("›")} ${cyan("probing")} ${dim(route)}\n`);
+
+    await driver.visit(new URL(route, baseUrl).href);
+    const probe = await driver.probe();
+
+    const selectors = await driver.interestingSelectors();
+    const sources = await driver.resolveSources(selectors);
+
+    // Elements sharing a source line are one defect with many instances.
+    const byOrigin = new Map<string, number>();
+    for (const loc of sources.values()) {
+      const key = `${loc.file}:${loc.line}`;
+      byOrigin.set(key, (byOrigin.get(key) ?? 0) + 1);
+    }
+
+    const focus = probe.focus as unknown as {
+      stops: Array<Record<string, unknown>>;
+      unreachable: Array<{ selector: string; reason: string }>;
+      notes: string[];
+    };
+
+    const summary: ProbeSummary = {
+      route,
+      axeTotal: probe.axe.violations.reduce((n, v) => n + v.nodes.length, 0),
+      axeCritical: probe.axe.violations.filter((v) => v.impact === "critical").length,
+      axeRules: probe.axe.violations.map((v) => `${v.id} (${v.impact})`),
+      tabStops: focus.stops.length,
+      unreachable: focus.unreachable.map((u) => ({
+        selector: u.selector,
+        reason: u.reason,
+        source: (() => {
+          const loc = sources.get(u.selector);
+          return loc ? `${loc.file}:${loc.line}` : null;
+        })(),
+      })),
+      flaggedNames: probe.transcript.lines
+        .filter((l) => l.issues.length)
+        .map((l) => ({ text: l.text, issue: l.issues[0] })),
+      notes: focus.notes,
+      lcp: probe.vitals.lcp?.value ?? null,
+      cls: probe.vitals.cls,
+      longTasks: probe.vitals.longTasks.filter((t) => t.duration > 50).length,
+      rootCauses: Array.from(byOrigin)
+        .filter(([, n]) => n > 1)
+        .sort((a, b) => b[1] - a[1])
+        .map(([origin, count]) => ({ origin, count })),
+    };
+
+    summaries.push(summary);
+
+    process.stdout.write(
+      `  ${bold(route)} ${dim(
+        `· ${summary.axeTotal} axe · ${summary.tabStops} tab stops · ` +
+          `LCP ${summary.lcp ?? "?"}ms · CLS ${summary.cls}`,
+      )}\n`,
+    );
+  }
+
+  renderProbeReport(summaries, projectRoot);
+  return summaries;
+}
+
+function renderProbeReport(summaries: ProbeSummary[], _root: string): void {
+  process.stdout.write(`\n${bold("Deterministic checks")} ${dim("— no model was called")}\n`);
+
+  for (const s of summaries) {
+    const hasSomething =
+      s.axeTotal || s.unreachable.length || s.flaggedNames.length || s.notes.length || s.rootCauses.length;
+
+    process.stdout.write(`\n${bold(s.route)}\n`);
+
+    process.stdout.write(
+      `  ${dim("vitals")}  LCP ${s.lcp ?? "?"}ms · CLS ${s.cls} · ${s.longTasks} long task(s) >50ms ` +
+        `${dim("(dev server — relative, not production)")}\n`,
+    );
+
+    if (s.axeRules.length) {
+      process.stdout.write(`  ${yellow("axe")}     ${s.axeRules.join(", ")}\n`);
+    } else {
+      process.stdout.write(`  ${dim("axe")}     ${green("no violations")}\n`);
+    }
+
+    for (const item of s.unreachable) {
+      process.stdout.write(
+        `  ${red("keyboard")} ${item.selector} — ${item.reason}` +
+          `${item.source ? dim(`  [${item.source}]`) : ""}\n`,
+      );
+    }
+
+    for (const name of s.flaggedNames) {
+      process.stdout.write(`  ${green("semantic")} "${name.text}" — ${dim(name.issue)}\n`);
+    }
+
+    for (const note of s.notes) {
+      process.stdout.write(`  ${dim("note")}     ${note}\n`);
+    }
+
+    for (const rc of s.rootCauses) {
+      process.stdout.write(
+        `  ${cyan("origin")}   ${rc.origin} ${dim(`← ${rc.count} elements share this line`)}\n`,
+      );
+    }
+
+    if (!hasSomething) process.stdout.write(`  ${green("clean")}\n`);
+  }
+
+  const semantic = summaries.reduce((n, s) => n + s.flaggedNames.length, 0);
+  const keyboard = summaries.reduce((n, s) => n + s.unreachable.length, 0);
+  const axeTotal = summaries.reduce((n, s) => n + s.axeTotal, 0);
+
+  process.stdout.write(`\n${bold("Summary")}\n`);
+  process.stdout.write(
+    `  ${axeTotal} axe violation(s) across ${summaries.length} route(s)\n` +
+      `  ${green(String(semantic))} meaningless accessible name(s) — no rule engine reports these\n` +
+      `  ${green(String(keyboard))} control(s) the keyboard never reaches\n`,
+  );
+  process.stdout.write(
+    `\n  ${dim("This is the half that needs no model. Run without --probe-only to have the")}\n` +
+      `  ${dim("agent judge these, drive other interaction states, and write verified patches.")}\n\n`,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Main                                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -229,9 +395,11 @@ async function main(): Promise<number> {
   }
 
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!apiKey) {
+
+  if (!apiKey && !args.probeOnly) {
     process.stderr.write(
-      `${red("No API key.")} Set GOOGLE_GENERATIVE_AI_API_KEY.\n` +
+      `${red("No API key.")} Set GOOGLE_GENERATIVE_AI_API_KEY, or run with ` +
+        `${bold("--probe-only")}\nto use the deterministic checks, which need no key.\n` +
         `Free key, no card: https://aistudio.google.com/apikey\n`,
     );
     return 1;
@@ -265,12 +433,21 @@ async function main(): Promise<number> {
 
     driver = await PageDriver.launch({ projectRoot: root, headless: !args.headed });
 
+    if (args.probeOnly) {
+      const report = await probeOnly(driver, server.url, routes, root);
+      if (args.json) {
+        writeFileSync(args.json, JSON.stringify(report, null, 2));
+        process.stdout.write(`${dim(`Report written to ${args.json}`)}\n`);
+      }
+      return report.some((r) => r.axeCritical > 0) ? 2 : 0;
+    }
+
     const result = await runAudit({
       driver,
       baseUrl: server.url,
       routes,
       projectRoot: root,
-      apiKey,
+      apiKey: apiKey!,
       allowWrites: args.fix,
       onEvent: renderEvent,
     });

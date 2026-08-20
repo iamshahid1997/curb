@@ -48,11 +48,15 @@ export class SourceMapResolver {
     const pos = originalPositionFor(map, { line, column });
     if (!pos?.source || pos.line == null) return null;
 
-    return {
-      file: this.normalise(pos.source),
-      line: pos.line,
-      column: pos.column ?? 0,
-    };
+    const file = this.normalise(pos.source);
+
+    // A location inside a dependency is not actionable — nobody is going to
+    // patch next/link to fix their own page. Owner stacks routinely resolve
+    // into framework internals when a component is rendered by one, and
+    // reporting those as root causes is noise at best and misleading at worst.
+    if (isDependency(file)) return null;
+
+    return { file, line: pos.line, column: pos.column ?? 0 };
   }
 
   private async mapFor(chunkUrl: string): Promise<ResolvedMap | null> {
@@ -106,6 +110,16 @@ export class SourceMapResolver {
 
     return file;
   }
+}
+
+/** Paths the user does not own and cannot reasonably be asked to change. */
+function isDependency(file: string): boolean {
+  return (
+    file.includes("node_modules") ||
+    file.startsWith("webpack/") ||
+    file.startsWith("next/") ||
+    file.includes("/.next/")
+  );
 }
 
 /* -------------------------------------------------------------------------- */

@@ -1,17 +1,18 @@
 {
-  "name": "curb-cli",
+  "name": "curb-a11y",
   "version": "0.1.0",
-  "private": true,
+  "description": "Audit your running app for accessibility and performance defects, trace each one to the line that caused it, and ship patches it has verified.",
   "type": "module",
-  "bin": {
-    "curb": "./dist/index.js"
-  },
+  "bin": { "curb": "./dist/index.js" },
+  "files": ["dist"],
+  "engines": { "node": ">=20.9" },
   "scripts": {
     "build": "node build.mjs",
-    "spike": "node --experimental-strip-types src/spike.ts"
+    "prepack": "node build.mjs"
   },
+  "keywords": ["accessibility", "a11y", "wcag", "axe-core", "performance", "agent", "react"],
+  "license": "MIT",
   "dependencies": {
-    "@jridgewell/trace-mapping": "^0.3.31",
-    "playwright": "^1.62.1"
+    "playwright": "^1.62.0"
   }
 }
