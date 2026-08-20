@@ -115,6 +115,59 @@ function isDisabled(el: HTMLElement): boolean {
   return false;
 }
 
+/**
+ * Roles managed by arrow keys rather than Tab, and the container each belongs
+ * to. In these widgets exactly one item carries tabindex=0 and the rest carry
+ * -1 — that is the correct pattern, not a defect.
+ */
+const COMPOSITE_ROLES: Record<string, string> = {
+  tab: "tablist",
+  menuitem: "menu,menubar",
+  menuitemcheckbox: "menu,menubar",
+  menuitemradio: "menu,menubar",
+  option: "listbox",
+  treeitem: "tree",
+  gridcell: "grid,treegrid",
+  row: "grid,treegrid,table",
+  radio: "radiogroup",
+};
+
+/**
+ * True when a negative tabindex is deliberate roving-tabindex management.
+ *
+ * Found by dogfooding: the tab bar in Curb's own UI was reported as three
+ * unreachable buttons, because a tablist correctly gives its inactive tabs
+ * tabindex=-1 and moves focus with arrow keys. Reporting that as a keyboard
+ * defect is a confident wrong answer about a correct implementation, which is
+ * worse than missing a real one.
+ *
+ * The signal is not the role alone — anyone can write role="tab" and get it
+ * wrong — but the presence of a sibling with the same role that IS in the tab
+ * order. That is what distinguishes managed focus from simply unreachable.
+ */
+function isRovingTabindex(el: HTMLElement): boolean {
+  const role = el.getAttribute("role");
+  if (!role) return false;
+
+  const containerRoles = COMPOSITE_ROLES[role];
+  if (!containerRoles) return false;
+
+  const containerSelector = containerRoles
+    .split(",")
+    .map((r) => `[role='${r}']`)
+    .join(",");
+
+  const container = el.closest(containerSelector);
+  if (!container) return false;
+
+  const siblings = Array.from(container.querySelectorAll<HTMLElement>(`[role='${role}']`));
+  return siblings.some((sibling) => {
+    if (sibling === el) return false;
+    const ti = sibling.getAttribute("tabindex");
+    return ti !== null && Number(ti) >= 0;
+  });
+}
+
 function tabindexOf(el: HTMLElement): number | null {
   const raw = el.getAttribute("tabindex");
   if (raw === null) return null;
@@ -433,6 +486,7 @@ export function traceFocusOrder(root: HTMLElement, maxTabs = 40): FocusOrderResu
   for (const el of suspects) {
     if (reachable.has(el)) continue;
     if (!isRendered(el)) continue;
+    if (isRovingTabindex(el)) continue;
 
     const ti = tabindexOf(el);
     const clickable = hasClickHandler(el);

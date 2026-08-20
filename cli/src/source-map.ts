@@ -18,6 +18,9 @@
 
 import { FlattenMap, TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 
+/** FlattenMap is a class, so its instance type has to be derived. */
+type ResolvedMap = TraceMap | InstanceType<typeof FlattenMap>;
+
 export interface SourceLocation {
   file: string;
   line: number;
@@ -29,7 +32,7 @@ interface AnyMap {
 }
 
 export class SourceMapResolver {
-  private readonly maps = new Map<string, TraceMap | FlattenMap | null>();
+  private readonly maps = new Map<string, ResolvedMap | null>();
 
   constructor(private readonly projectRoot: string) {}
 
@@ -52,7 +55,7 @@ export class SourceMapResolver {
     };
   }
 
-  private async mapFor(chunkUrl: string): Promise<TraceMap | FlattenMap | null> {
+  private async mapFor(chunkUrl: string): Promise<ResolvedMap | null> {
     const cached = this.maps.get(chunkUrl);
     if (cached !== undefined) return cached;
 
