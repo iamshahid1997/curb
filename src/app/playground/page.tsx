@@ -84,9 +84,18 @@ export default function Playground() {
   /* Probing                                                                */
   /* ---------------------------------------------------------------------- */
 
+  const refreshSeq = useRef(0);
+
   const refreshPanels = useCallback(async (src: string) => {
     const controller = controllerRef.current;
     if (!controller) return;
+
+    // Refreshes overlap — a stage resize can start one while the initial mount
+    // is still waiting on a boot timeout. Without this the older attempt's
+    // failure lands after the newer one's success and replaces good state with
+    // a stale error.
+    const seq = (refreshSeq.current += 1);
+    const isStale = () => seq !== refreshSeq.current;
 
     try {
       // Deliberately not gated on visibility. Only geometry-dependent probes
@@ -101,6 +110,7 @@ export default function Playground() {
         controller.send<"transcribe_screen_reader">({ type: "transcribe_screen_reader" }),
       ]);
 
+      if (isStale()) return;
       setAxe(nextAxe);
       setTranscript(nextTranscript);
       setError(null);
@@ -112,6 +122,7 @@ export default function Playground() {
         const nextFocus = await controller.send<"trace_focus_order">({
           type: "trace_focus_order",
         });
+        if (isStale()) return;
         setFocus(nextFocus);
         setNotice(null);
 
@@ -120,12 +131,13 @@ export default function Playground() {
           ...nextFocus.unreachable.map((u) => u.selector),
         ].filter((x): x is string => Boolean(x));
 
-        setBoxes(
-          selectors.length
-            ? (await controller.send<"measure_boxes">({ type: "measure_boxes", selectors })).boxes
-            : [],
-        );
+        const measured = selectors.length
+          ? (await controller.send<"measure_boxes">({ type: "measure_boxes", selectors })).boxes
+          : [];
+        if (isStale()) return;
+        setBoxes(measured);
       } catch (err) {
+        if (isStale()) return;
         const message = err instanceof Error ? err.message : String(err);
         if (/no layout|hidden|background/i.test(message)) {
           setFocus(null);
@@ -136,6 +148,7 @@ export default function Playground() {
         }
       }
     } catch (err) {
+      if (isStale()) return;
       setError(err instanceof Error ? err.message : String(err));
     }
   }, []);

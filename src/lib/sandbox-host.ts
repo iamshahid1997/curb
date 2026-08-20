@@ -170,7 +170,15 @@ export class SandboxController {
   /* ---------------------------------------------------------------------- */
 
   private ensureReady(): Promise<void> {
-    if (!this.ready) this.ready = this.build();
+    if (!this.ready) {
+      // A rejected boot must not be memoised: leaving the failed promise in
+      // place makes every later send fail forever, even once the condition
+      // that caused it (a hidden tab, a slow first compile) has passed.
+      this.ready = this.build().catch((err: unknown) => {
+        this.teardownFrame(err instanceof Error ? err : new Error(String(err)));
+        throw err;
+      });
+    }
     return this.ready;
   }
 
