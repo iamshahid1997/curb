@@ -15,6 +15,7 @@
  */
 
 import axe from "axe-core";
+import { withAxeContext } from "../axe-context";
 import { selectorFor } from "../dom";
 
 /* -------------------------------------------------------------------------- */
@@ -31,20 +32,6 @@ function commons(): AxeCommons {
   const c = (axe as unknown as { commons?: AxeCommons }).commons;
   if (!c) throw new Error("axe.commons unavailable — the full axe build is required.");
   return c;
-}
-
-/**
- * axe's helpers read from its virtual-DOM cache, which only exists between
- * setup() and teardown(). Wrapping keeps that lifecycle in one place.
- */
-function withAxeSetup<T>(fn: () => T): T {
-  const a = axe as unknown as { setup(node: Node): void; teardown(): void };
-  a.setup(document);
-  try {
-    return fn();
-  } finally {
-    a.teardown();
-  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -273,7 +260,7 @@ function buildNode(el: Element, c: AxeCommons): A11yNode | null {
 export function snapshotA11yTree(root: Element): A11yTreeResult {
   const c = commons();
 
-  const tree = withAxeSetup(() => buildNode(root, c));
+  const tree = withAxeContext(() => buildNode(root, c));
 
   const totals = { nodes: 0, unnamed: 0, suspicious: 0, landmarks: 0 };
   const headingOutline: A11yTreeResult["headingOutline"] = [];

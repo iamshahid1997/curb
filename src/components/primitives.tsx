@@ -21,7 +21,7 @@ export function Panel({
     >
       {title && (
         <header
-          className="flex items-center justify-between gap-3 border-b px-3 py-2"
+          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-3 py-2"
           style={{ borderColor: "var(--border)", background: "var(--bg-sunken)" }}
         >
           <h2
@@ -129,7 +129,13 @@ export function Tabs<T extends string>({
   label: string;
 }) {
   return (
-    <div role="tablist" aria-label={label} className="flex gap-1">
+    // Scrolls rather than wrapping: at 375px the four labels stack onto three
+    // lines each and the panel action gets pushed off the edge.
+    <div
+      role="tablist"
+      aria-label={label}
+      className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1"
+    >
       {tabs.map((tab) => {
         const selected = tab.id === active;
         return (
@@ -146,7 +152,7 @@ export function Tabs<T extends string>({
               if (e.key === "ArrowRight") onChange(tabs[(index + 1) % tabs.length].id);
               if (e.key === "ArrowLeft") onChange(tabs[(index - 1 + tabs.length) % tabs.length].id);
             }}
-            className="rounded-[6px] px-2.5 py-1 text-[12px] font-medium"
+            className="shrink-0 whitespace-nowrap rounded-[6px] px-2.5 py-1 text-[12px] font-medium"
             style={{
               background: selected ? "var(--bg-raised)" : "transparent",
               color: selected ? "var(--text)" : "var(--text-muted)",

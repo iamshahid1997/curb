@@ -230,3 +230,13 @@ body {
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse 80% 55% at 50% 0%, #000 40%, transparent 100%);
 }
+
+/* Inline links inside prose are underlined.
+   Curb's own audit flagged link-in-text-block on this site: a link that differs
+   from surrounding text only by colour fails WCAG 1.4.1 for anyone who cannot
+   distinguish the hue. Standalone links (nav, buttons) are exempt because their
+   position and grouping already identify them. */
+.curb-prose a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

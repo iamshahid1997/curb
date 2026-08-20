@@ -20,6 +20,7 @@
  */
 
 import axe from "axe-core";
+import { withAxeContext } from "../axe-context";
 import {
   assertLayoutAvailable,
   hasClickHandler,
@@ -265,20 +266,18 @@ function measureFocusIndicator(el: HTMLElement): FocusIndicator {
 
 function describe(el: HTMLElement, order: number, reordered: boolean): FocusStop {
   const c = (axe as unknown as { commons?: AxeCommons }).commons;
-  const a = axe as unknown as { setup(n: Node): void; teardown(): void };
 
   let role = "";
   let name = "";
   if (c) {
-    a.setup(document);
-    try {
-      role = c.aria.getRole(el) ?? "";
-      name = c.text.accessibleText(el) ?? "";
-    } catch {
-      /* fall through to empty */
-    } finally {
-      a.teardown();
-    }
+    withAxeContext(() => {
+      try {
+        role = c.aria.getRole(el) ?? "";
+        name = c.text.accessibleText(el) ?? "";
+      } catch {
+        /* fall through to empty */
+      }
+    });
   }
 
   const focusIndicator = measureFocusIndicator(el);

@@ -1,6 +1,12 @@
 /**
  * Demo components.
  *
+ * Images use a tiny inline data URI. The sandbox CSP allows only `data:` and
+ * `blob:` images so pasted code cannot beacon out, and a remote src would
+ * surface as a console error the agent might mistake for a defect in the
+ * component. Short rather than pretty, so the fixture stays readable in the
+ * editor.
+ *
  * `TicketCard` is deliberately broken, and broken across both halves of the
  * claim: plain accessibility defects a rule engine passes, plus coupled
  * accessibility/performance patterns. It is synthetic — a real open-source
@@ -29,7 +35,7 @@ const TicketCard = React.memo(function TicketCard({ ticket }) {
   return (
     <div className="card animate-pulse transition-all duration-300">
       <h3>Ticket</h3>
-      <img src="/hero.png" alt="image1" loading="lazy" />
+      <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="image1" loading="lazy" />
 
       <div onClick={() => setOpen(true)}>
         Open details <ChevronDown />
@@ -68,7 +74,7 @@ const TicketCard = React.memo(function TicketCard({ ticket }) {
       <h2 id="card-title">Boarding pass</h2>
 
       <img
-        src="/seat-map.png"
+        src="data:image/gif;base64,R0lGODlhAQABAAAAACw="
         alt="Seat map showing seat 14A beside the window in row 14"
       />
 

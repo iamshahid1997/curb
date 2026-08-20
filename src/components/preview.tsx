@@ -88,9 +88,19 @@ export function SandboxPreview({
                   borderRadius: 3,
                 }}
               >
+                {/*
+                  Dark chip with white text rather than the kind colour as a
+                  background: at 9px bold, white on the accent measures ~3.2:1,
+                  which our own audit flagged. The coloured border still carries
+                  the meaning, and this stays legible over any component.
+                */}
                 <span
                   className="absolute -top-[9px] left-0 whitespace-nowrap rounded px-1 text-[9px] font-bold leading-[14px]"
-                  style={{ background: style.border, color: "#fff" }}
+                  style={{
+                    background: "#0d0d10",
+                    color: "#ffffff",
+                    border: `1px solid ${style.border}`,
+                  }}
                 >
                   {overlay.order !== undefined ? overlay.order : overlay.label}
                 </span>
