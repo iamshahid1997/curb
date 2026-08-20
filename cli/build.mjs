@@ -35,7 +35,16 @@ const cli = await build({
   platform: "node",
   target: ["node20"],
   external: ["playwright"],
-  banner: { js: "#!/usr/bin/env node" },
+  banner: {
+    // Some transitive deps of the AI SDK are CJS and call require() at load
+    // time. In an ESM bundle esbuild replaces that with a shim that throws —
+    // unless a real `require` is in scope, which the shim prefers when present.
+    js: [
+      "#!/usr/bin/env node",
+      "import { createRequire as __createRequire } from 'node:module';",
+      "const require = __createRequire(import.meta.url);",
+    ].join("\n"),
+  },
   logLevel: "warning",
 });
 
