@@ -56,6 +56,8 @@ export type SandboxCommand =
   | { type: "transcribe_screen_reader" }
   /** Walk tab order; report traps and keyboard-unreachable controls. */
   | { type: "trace_focus_order"; maxTabs?: number }
+  /** Static AST facts about the source. Pure — needs no mounted component. */
+  | { type: "analyze_source"; source: string }
   /** Liveness check. Used by the watchdog. */
   | { type: "ping" };
 
@@ -84,6 +86,11 @@ export interface MountResult {
   componentName: string;
   /** True when we had to infer the export because none was declared. */
   exportInferred: boolean;
+  /**
+   * Imports the sandbox could not resolve and replaced with placeholders.
+   * Findings about these subtrees may be artefacts of the stub.
+   */
+  stubbedModules: string[];
   /** React dev-mode warnings captured during render. Useful probe signal. */
   reactWarnings: string[];
   /** Milliseconds spent in the initial render commit. */
@@ -174,6 +181,7 @@ export type InboundMessage = ResponseEnvelope | SandboxEvent;
 // axe-core just by importing this protocol.
 import type { A11yTreeResult, TranscriptResult } from "./runtime/probes/a11y-tree";
 import type { FocusOrderResult } from "./runtime/probes/focus-order";
+import type { SourceFacts } from "./runtime/probes/source";
 
 export type {
   A11yNode,
@@ -187,6 +195,13 @@ export type {
   FocusStop,
   UnreachableControl,
 } from "./runtime/probes/focus-order";
+export type {
+  AriaLiveFact,
+  ImageFact,
+  ImportFact,
+  LoadingStateFact,
+  SourceFacts,
+} from "./runtime/probes/source";
 
 export interface ResultMap {
   mount: MountResult;
@@ -196,6 +211,7 @@ export interface ResultMap {
   snapshot_a11y_tree: A11yTreeResult;
   transcribe_screen_reader: TranscriptResult;
   trace_focus_order: FocusOrderResult;
+  analyze_source: SourceFacts;
   ping: PingResult;
 }
 

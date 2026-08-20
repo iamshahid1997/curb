@@ -27,6 +27,7 @@ import { CompileError, compile } from "./compile";
 import { accessibleName, countNodes, resolve, selectorFor } from "./dom";
 import { snapshotA11yTree, transcribe } from "./probes/a11y-tree";
 import { traceFocusOrder } from "./probes/focus-order";
+import { analyzeSource } from "./probes/source";
 
 /* -------------------------------------------------------------------------- */
 /* Mount state                                                                */
@@ -123,7 +124,7 @@ async function handleMount(
 ): Promise<MountResult> {
   handleReset();
 
-  const { Component, componentName, exportInferred } = compile(source);
+  const { Component, componentName, exportInferred, stubbedModules } = compile(source);
 
   const host = getContainer();
   root = createRoot(host);
@@ -160,6 +161,7 @@ async function handleMount(
   return {
     componentName,
     exportInferred,
+    stubbedModules,
     reactWarnings: drainWarnings(),
     renderMs: Math.round(renderMs * 100) / 100,
     nodeCount: countNodes(host),
@@ -409,6 +411,9 @@ async function dispatch(envelope: CommandEnvelope): Promise<unknown> {
     case "trace_focus_order":
       requireMounted();
       return traceFocusOrder(getContainer(), command.maxTabs);
+    case "analyze_source":
+      // Pure function of the source text — deliberately does not requireMounted.
+      return analyzeSource(command.source);
     default: {
       const exhaustive: never = command;
       throw new Error(`Unknown command: ${JSON.stringify(exhaustive)}`);

@@ -10,19 +10,33 @@ import { runAudit } from "@/lib/agent/run";
 import { SandboxController } from "@/lib/sandbox-host";
 import type { Finding, RunRecord, TraceEvent } from "@/lib/agent/types";
 
-const CURSED = `function TicketCard({ ticket }) {
+/**
+ * Deliberately broken, and broken in ways that span both halves of the pitch:
+ * plain a11y defects a rule engine misses, plus coupled a11y/perf patterns
+ * (memo around a live region, an unmarked loading state, unguarded animation,
+ * a barrel icon import, a lazy first image).
+ */
+const CURSED = `import { Bell, ChevronDown } from "lucide-react";
+
+const TicketCard = React.memo(function TicketCard({ ticket }) {
   const [open, setOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
   return (
-    <div className="card">
+    <div className="card animate-pulse transition-all duration-300">
       <h3>Ticket</h3>
-      <img src="/avatar.png" alt="image1" />
+      <img src="/hero.png" alt="image1" loading="lazy" />
 
-      <div onClick={() => setOpen(true)}>Open details</div>
+      <div onClick={() => setOpen(true)}>
+        Open details <ChevronDown />
+      </div>
+
+      <button><Bell /></button>
 
       <a href="/terms" tabIndex={3}>Terms</a>
       <input placeholder="Field 2" />
+
+      <div aria-live="polite">{ticket?.status}</div>
 
       {saving && <div>Saving…</div>}
 
@@ -36,7 +50,7 @@ const CURSED = `function TicketCard({ ticket }) {
       )}
     </div>
   );
-}`;
+});`;
 
 export default function AgentDevPage() {
   const controllerRef = useRef<SandboxController | null>(null);

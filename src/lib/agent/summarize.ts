@@ -20,6 +20,14 @@ export function summarizeMount(m: MountResult): string {
   if (m.exportInferred) {
     parts.push("(No default export declared; inferred from the last PascalCase declaration.)");
   }
+  if (m.stubbedModules.length) {
+    parts.push(
+      `NOTE: these imports could not be resolved and were replaced with empty ` +
+        `placeholder elements: ${m.stubbedModules.join(", ")}. Anything rendered by ` +
+        `them is NOT the real markup, so do not report accessibility defects about ` +
+        `those subtrees — you would be describing the placeholder, not the component.`,
+    );
+  }
   if (m.reactWarnings.length) {
     parts.push(`React warnings:\n${m.reactWarnings.map((w) => `  - ${w}`).join("\n")}`);
   }

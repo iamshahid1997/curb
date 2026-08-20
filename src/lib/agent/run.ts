@@ -13,12 +13,20 @@
 
 import type { SandboxController } from "@/lib/sandbox-host";
 import type {
+  A11yTreeResult,
   AxeResult,
   DriveAction,
+  DriveResult,
   FocusOrderResult,
   MountResult,
+  SourceFacts,
   TranscriptResult,
 } from "@/sandbox/protocol";
+import {
+  detectCorrelations,
+  summarizeCorrelations,
+  type CorrelationCandidate,
+} from "./correlate";
 import { buildInitialUserMessage } from "./prompt";
 import {
   summarizeAxe,
@@ -105,8 +113,29 @@ export async function runAudit(options: RunOptions): Promise<RunRecord> {
   let lastAxe: AxeResult | null = null;
   let lastTranscript: TranscriptResult | null = null;
   let lastFocus: FocusOrderResult | null = null;
+  let lastTree: A11yTreeResult | null = null;
+  let sourceFacts: SourceFacts | null = null;
+
+  /** Drive transitions so far — the runtime half of the C1 live-region rule. */
+  const transitions: Array<{ label: string; result: DriveResult }> = [];
+
+  const correlations = (): CorrelationCandidate[] =>
+    sourceFacts
+      ? detectCorrelations({
+          facts: sourceFacts,
+          transcript: lastTranscript,
+          focus: lastFocus,
+          tree: lastTree,
+          transitions,
+        })
+      : [];
 
   const probeAll = async () => {
+    // Geometry-dependent probes need a painted frame. Backgrounding the tab
+    // zeroes every layout box, so wait for the page to come back rather than
+    // failing a run the user only paused by switching tabs.
+    await waitForVisible(signal);
+
     lastAxe = await controller.send<"run_axe">({ type: "run_axe" });
     lastTranscript = await controller.send<"transcribe_screen_reader">({
       type: "transcribe_screen_reader",
@@ -136,6 +165,11 @@ export async function runAudit(options: RunOptions): Promise<RunRecord> {
     emit({ type: "phase", at: Date.now(), phase: "probing", note: "default state" });
 
     const mount = await controller.send<"mount">({ type: "mount", source });
+    sourceFacts = await controller.send<"analyze_source">({
+      type: "analyze_source",
+      source,
+    });
+    lastTree = await controller.send<"snapshot_a11y_tree">({ type: "snapshot_a11y_tree" });
     await probeAll();
 
     let baseline = snapshot();
@@ -149,6 +183,7 @@ export async function runAudit(options: RunOptions): Promise<RunRecord> {
           axeSummary: summarizeAxe(lastAxe!),
           transcript: summarizeTranscript(lastTranscript!),
           focusSummary: summarizeFocus(lastFocus!),
+          correlations: summarizeCorrelations(correlations()),
         }),
       },
     ];
@@ -311,10 +346,10 @@ export async function runAudit(options: RunOptions): Promise<RunRecord> {
         }
 
         case "snapshot_a11y_tree": {
-          const tree = await controller.send<"snapshot_a11y_tree">({
+          lastTree = await controller.send<"snapshot_a11y_tree">({
             type: "snapshot_a11y_tree",
           });
-          return summarizeTree(tree);
+          return summarizeTree(lastTree);
         }
 
         case "drive": {
@@ -330,6 +365,7 @@ export async function runAudit(options: RunOptions): Promise<RunRecord> {
 
           const result = await controller.send<"drive">({ type: "drive", actions });
           visited.push({ label: state, actions });
+          transitions.push({ label: state, result });
 
           // Re-probe automatically: a state the agent cannot see is a state it
           // will hallucinate about.
@@ -346,6 +382,9 @@ export async function runAudit(options: RunOptions): Promise<RunRecord> {
             "",
             "FOCUS:",
             summarizeFocus(lastFocus!),
+            "",
+            "COUPLED A11Y/PERF PATTERNS:",
+            summarizeCorrelations(correlations()),
           ].join("\n");
         }
 
@@ -513,6 +552,60 @@ export async function runAudit(options: RunOptions): Promise<RunRecord> {
     emit({ type: "run-failed", at: Date.now(), error: message });
     throw Object.assign(err instanceof Error ? err : new Error(message), { record });
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Visibility                                                                 */
+/* -------------------------------------------------------------------------- */
+
+const VISIBILITY_TIMEOUT_MS = 120_000;
+
+/**
+ * Resolve once the document is visible.
+ *
+ * A hidden document has no layout, and probing it produces false negatives
+ * rather than errors — every focusable element measures 0x0 and drops out. The
+ * sandbox refuses to probe in that state, so the loop waits here instead of
+ * burning the run. Bounded, so a permanently hidden page fails rather than
+ * hanging forever.
+ */
+function waitForVisible(signal: AbortSignal | undefined): Promise<void> {
+  if (typeof document === "undefined" || document.visibilityState === "visible") {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      document.removeEventListener("visibilitychange", onChange);
+      signal?.removeEventListener("abort", onAbort);
+      clearTimeout(timer);
+    };
+
+    const onChange = () => {
+      if (document.visibilityState === "visible") {
+        cleanup();
+        resolve();
+      }
+    };
+
+    const onAbort = () => {
+      cleanup();
+      reject(new Error("Run cancelled while waiting for the page to become visible."));
+    };
+
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(
+        new Error(
+          "The page stayed hidden for two minutes, so the run was stopped. " +
+            "Probes that depend on layout cannot run in a background tab.",
+        ),
+      );
+    }, VISIBILITY_TIMEOUT_MS);
+
+    document.addEventListener("visibilitychange", onChange);
+    signal?.addEventListener("abort", onAbort);
+  });
 }
 
 /* -------------------------------------------------------------------------- */

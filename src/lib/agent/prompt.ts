@@ -51,6 +51,7 @@ export function buildInitialUserMessage(params: {
   axeSummary: string;
   transcript: string;
   focusSummary: string;
+  correlations: string;
 }): string {
   return `Component source:
 
@@ -71,6 +72,11 @@ ${params.transcript}
 
 FOCUS ORDER
 ${params.focusSummary}
+
+COUPLED ACCESSIBILITY/PERFORMANCE PATTERNS (deterministic rules, not yet judged)
+${params.correlations}
+
+These coupled patterns are CANDIDATES with evidence attached, not conclusions. Judge each one in context: report it as kind "correlation" if the evidence holds up, and ignore it if it does not apply here. Do not invent coupled findings that are not in this list.
 
 Plan which other interaction states exist in this source and probe them before diagnosing.`;
 }

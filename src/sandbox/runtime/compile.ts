@@ -7,9 +7,9 @@
  * 1. People paste fragments, not modules. `function Card() { ... }` with no
  *    export is the common case. We infer the export rather than rejecting it.
  * 2. Pasted code imports things we cannot supply (`lucide-react`, `@/lib/utils`).
- *    We fail with a message naming the module instead of a stack trace, because
- *    "we can't resolve lucide-react" is actionable and "x is not a function" is
- *    not.
+ *    Those resolve to placeholder components rather than failing the mount, so
+ *    Curb works on real code and not only self-contained snippets. Which
+ *    modules were stubbed is reported up to the agent — see createRequire.
  */
 
 import * as Babel from "@babel/standalone";
@@ -29,20 +29,61 @@ export interface CompileOutput {
   Component: React.ComponentType<Record<string, unknown>>;
   componentName: string;
   exportInferred: boolean;
+  /** Module ids replaced with placeholders. Reported, never hidden. */
+  stubbedModules: string[];
 }
 
-/** Modules we can hand to pasted code. Everything else is a hard, clear error. */
-function createRequire(): (id: string) => unknown {
+/**
+ * Modules available to pasted code.
+ *
+ * Real components import icons, utilities and design-system primitives. Failing
+ * the whole mount on the first unresolvable import would restrict Curb to
+ * self-contained snippets, so unknown modules resolve to placeholder components
+ * instead.
+ *
+ * The trade-off is real and must not be hidden: a stubbed icon renders as an
+ * empty inline span, so it carries none of the original's markup or ARIA. Any
+ * finding about a stubbed element could be an artefact of the stub. Every
+ * stubbed module id is recorded and reported up through MountResult so the
+ * agent is told plainly which parts of the tree are not the real thing.
+ */
+function createRequire(stubbed: Set<string>): (id: string) => unknown {
   const registry: Record<string, unknown> = {
     react: React,
     "react/jsx-runtime": React,
+    "react/jsx-dev-runtime": React,
   };
+
+  /** Renders nothing but its children, so layout and text survive. */
+  const Placeholder = React.forwardRef<HTMLSpanElement, Record<string, unknown>>(
+    function CurbStub(props, ref) {
+      const { children, ...rest } = props as { children?: React.ReactNode };
+      // Pass through aria-*/role/className so a stub cannot mask a real defect
+      // by silently dropping the attributes the component set on it.
+      const safe: Record<string, unknown> = { ref, "data-curb-stub": "true" };
+      for (const [key, value] of Object.entries(rest)) {
+        if (/^(aria-|data-|role$|class|id$|title$|tabIndex$)/i.test(key)) safe[key] = value;
+      }
+      return React.createElement("span", safe, children ?? null);
+    },
+  );
 
   return (id: string) => {
     if (id in registry) return registry[id];
-    throw new CompileError(
-      `Cannot resolve "${id}". The sandbox only provides "react" — ` +
-        `inline any helpers, icons or utilities the component depends on.`,
+
+    stubbed.add(id);
+
+    // Any named export becomes the same placeholder component.
+    return new Proxy(
+      { __esModule: true, default: Placeholder },
+      {
+        get(target, prop) {
+          if (prop === "__esModule") return true;
+          if (prop in target) return (target as Record<string | symbol, unknown>)[prop];
+          if (typeof prop === "symbol") return undefined;
+          return Placeholder;
+        },
+      },
     );
   };
 }
@@ -136,11 +177,12 @@ export function compile(source: string): CompileOutput {
   }
 
   const moduleObj: { exports: Record<string, unknown> } = { exports: {} };
+  const stubbed = new Set<string>();
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const factory = new Function("React", "require", "module", "exports", code);
-    factory(React, createRequire(), moduleObj, moduleObj.exports);
+    factory(React, createRequire(stubbed), moduleObj, moduleObj.exports);
   } catch (err) {
     if (err instanceof CompileError) throw err;
     const e = err as Error;
@@ -168,5 +210,6 @@ export function compile(source: string): CompileOutput {
     Component,
     componentName,
     exportInferred: inference.inferredName !== null,
+    stubbedModules: Array.from(stubbed),
   };
 }
