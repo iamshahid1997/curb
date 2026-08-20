@@ -18,6 +18,9 @@ const SAMPLE = `function Card() {
       <h3>Ticket</h3>
       <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="image1" />
       <div onClick={() => setOpen(true)}>Open details</div>
+      <a href="#x" tabIndex={3}>Terms</a>
+      <input placeholder="Field 2" />
+      <button aria-hidden="true">Hidden but tabbable</button>
       {open && (
         <div role="dialog">
           <p>Details go here.</p>
@@ -136,6 +139,39 @@ export default function SandboxDevPage() {
               className="rounded bg-neutral-700 px-3 py-1.5 text-sm disabled:opacity-40"
             >
               drive
+            </button>
+            <button
+              disabled={busy}
+              onClick={() =>
+                run("trace_focus_order", () =>
+                  c().send<"trace_focus_order">({ type: "trace_focus_order" }),
+                )
+              }
+              className="rounded bg-emerald-700 px-3 py-1.5 text-sm disabled:opacity-40"
+            >
+              focus order
+            </button>
+            <button
+              disabled={busy}
+              onClick={() =>
+                run("transcribe_screen_reader", () =>
+                  c().send<"transcribe_screen_reader">({ type: "transcribe_screen_reader" }),
+                )
+              }
+              className="rounded bg-emerald-700 px-3 py-1.5 text-sm disabled:opacity-40"
+            >
+              transcript
+            </button>
+            <button
+              disabled={busy}
+              onClick={() =>
+                run("snapshot_a11y_tree", () =>
+                  c().send<"snapshot_a11y_tree">({ type: "snapshot_a11y_tree" }),
+                )
+              }
+              className="rounded bg-emerald-700 px-3 py-1.5 text-sm disabled:opacity-40"
+            >
+              a11y tree
             </button>
             <button
               disabled={busy}

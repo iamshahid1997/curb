@@ -142,3 +142,50 @@ export function countNodes(root: Element | null): number {
   if (!root) return 0;
   return root.querySelectorAll("*").length + 1;
 }
+
+/* -------------------------------------------------------------------------- */
+/* React handler detection                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * React does not set `onclick` attributes — handlers live in its synthetic
+ * event system, so `querySelectorAll('[onclick]')` finds nothing in a React
+ * tree. React does however hang its props off the DOM node under a
+ * `__reactProps$<hash>` key, which is how we recover them.
+ *
+ * Reaching into a React internal is a liability if the key name ever changes,
+ * so every caller must degrade gracefully when this returns null rather than
+ * treating absence as proof there is no handler.
+ */
+export function reactProps(el: Element): Record<string, unknown> | null {
+  for (const key of Object.keys(el)) {
+    if (key.startsWith("__reactProps$")) {
+      const value = (el as unknown as Record<string, unknown>)[key];
+      return value && typeof value === "object"
+        ? (value as Record<string, unknown>)
+        : null;
+    }
+  }
+  return null;
+}
+
+export function hasClickHandler(el: Element): boolean {
+  if (el.hasAttribute("onclick")) return true;
+  const props = reactProps(el);
+  return typeof props?.onClick === "function";
+}
+
+export function hasKeyboardHandler(el: Element): boolean {
+  const props = reactProps(el);
+  if (!props) return false;
+  return (
+    typeof props.onKeyDown === "function" ||
+    typeof props.onKeyUp === "function" ||
+    typeof props.onKeyPress === "function"
+  );
+}
+
+/** Elements that already respond to Enter/Space without extra wiring. */
+export function isNativelyInteractive(el: Element): boolean {
+  return /^(a|button|input|select|textarea|summary|details|option)$/i.test(el.tagName);
+}

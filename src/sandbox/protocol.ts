@@ -168,14 +168,32 @@ export type InboundMessage = ResponseEnvelope | SandboxEvent;
 /* Result type mapping                                                        */
 /* -------------------------------------------------------------------------- */
 
+// Type-only imports, erased at compile time — the host bundle never pulls in
+// axe-core just by importing this protocol.
+import type { A11yTreeResult, TranscriptResult } from "./runtime/probes/a11y-tree";
+import type { FocusOrderResult } from "./runtime/probes/focus-order";
+
+export type {
+  A11yNode,
+  A11yTreeResult,
+  NameQuality,
+  TranscriptLine,
+  TranscriptResult,
+} from "./runtime/probes/a11y-tree";
+export type {
+  FocusOrderResult,
+  FocusStop,
+  UnreachableControl,
+} from "./runtime/probes/focus-order";
+
 export interface ResultMap {
   mount: MountResult;
   drive: DriveResult;
   reset: { ok: true };
   run_axe: AxeResult;
-  snapshot_a11y_tree: unknown;
-  transcribe_screen_reader: unknown;
-  trace_focus_order: unknown;
+  snapshot_a11y_tree: A11yTreeResult;
+  transcribe_screen_reader: TranscriptResult;
+  trace_focus_order: FocusOrderResult;
   ping: PingResult;
 }
 

@@ -25,6 +25,8 @@ import {
 } from "../protocol";
 import { CompileError, compile } from "./compile";
 import { accessibleName, countNodes, resolve, selectorFor } from "./dom";
+import { snapshotA11yTree, transcribe } from "./probes/a11y-tree";
+import { traceFocusOrder } from "./probes/focus-order";
 
 /* -------------------------------------------------------------------------- */
 /* Mount state                                                                */
@@ -399,9 +401,14 @@ async function dispatch(envelope: CommandEnvelope): Promise<unknown> {
     case "ping":
       return handlePing();
     case "snapshot_a11y_tree":
+      requireMounted();
+      return snapshotA11yTree(getContainer());
     case "transcribe_screen_reader":
+      requireMounted();
+      return transcribe(getContainer());
     case "trace_focus_order":
-      throw new Error(`Probe "${command.type}" is not implemented yet.`);
+      requireMounted();
+      return traceFocusOrder(getContainer(), command.maxTabs);
     default: {
       const exhaustive: never = command;
       throw new Error(`Unknown command: ${JSON.stringify(exhaustive)}`);
