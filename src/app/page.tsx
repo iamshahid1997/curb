@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { downloadCassette, replayRun } from "@/lib/agent/replay";
 import { runAudit } from "@/lib/agent/run";
 import type { Finding, RunRecord, TraceEvent, VerificationResult } from "@/lib/agent/types";
 import { DEFAULT_FIXTURE, FIXTURES } from "@/lib/fixtures";
@@ -45,6 +46,7 @@ export default function Home() {
   const [focus, setFocus] = useState<FocusOrderResult | null>(null);
   const [boxes, setBoxes] = useState<MeasuredBox[]>([]);
   const [showOverlays, setShowOverlays] = useState(true);
+  const [replaying, setReplaying] = useState(false);
 
   /* ---------------------------------------------------------------------- */
   /* Sandbox lifecycle                                                      */
@@ -132,6 +134,8 @@ export default function Home() {
       });
 
       setRecord(result);
+      // Handy for saving a cassette, and for inspecting a run from the console.
+      (window as unknown as { __curbRecord?: RunRecord }).__curbRecord = result;
       setStatus(
         `Audit complete. ${result.findings.length} findings, ` +
           `${result.findings.filter((f) => !f.caughtByAxe).length} that a rule engine missed.`,
@@ -146,6 +150,57 @@ export default function Home() {
       setRunning(false);
     }
   }, [source, refreshPanels]);
+
+  /* ---------------------------------------------------------------------- */
+  /* Replay                                                                 */
+  /* ---------------------------------------------------------------------- */
+
+  const startReplay = useCallback(async () => {
+    setReplaying(true);
+    setError(null);
+    setEvents([]);
+    setFindings([]);
+    setRecord(null);
+    setVerification(null);
+    setTab("preview");
+    setStatus("Replaying a recorded run. No model calls are made.");
+
+    abortRef.current = new AbortController();
+
+    try {
+      const res = await fetch("/cassettes/ticket-card.json");
+      if (!res.ok) throw new Error("Recorded run is unavailable.");
+      const cassette = (await res.json()) as RunRecord;
+
+      setSource(cassette.originalSource);
+      await refreshPanels(cassette.originalSource);
+
+      await replayRun({
+        record: cassette,
+        signal: abortRef.current.signal,
+        onEvent: (event) => {
+          setEvents((prev) => [...prev, event]);
+          if (event.type === "findings") setFindings(event.findings);
+          if (event.type === "patch-attempt") setVerification(event.verification);
+          if (event.type === "phase") setStatus(`${event.phase}${event.note ? `: ${event.note}` : ""}`);
+        },
+      });
+
+      setRecord(cassette);
+      if (cassette.patchedSource) {
+        await refreshPanels(cassette.patchedSource);
+        setTab("diff");
+      }
+      setStatus(`Replay finished. ${cassette.findings.length} findings.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.includes("cancelled")) setError(message);
+    } finally {
+      setReplaying(false);
+    }
+  }, [refreshPanels]);
+
+  const busy = running || replaying;
 
   /* ---------------------------------------------------------------------- */
   /* Derived                                                                */
@@ -193,12 +248,22 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-2">
-          {running ? (
+          {record && !busy && (
+            <Button variant="ghost" onClick={() => downloadCassette(record)}>
+              Save run
+            </Button>
+          )}
+          {busy ? (
             <Button variant="danger" onClick={() => abortRef.current?.abort()}>
               Cancel
             </Button>
           ) : (
-            <Button onClick={start}>Run audit</Button>
+            <>
+              <Button variant="ghost" onClick={startReplay}>
+                Watch a recorded run
+              </Button>
+              <Button onClick={start}>Run audit</Button>
+            </>
           )}
         </div>
       </header>
@@ -361,7 +426,7 @@ export default function Home() {
           }
         >
           <div className="max-h-[700px] overflow-y-auto">
-            {running && !findings.length ? (
+            {busy && !findings.length ? (
               <Empty>
                 <span className="curb-live-dot">Auditing…</span>
               </Empty>

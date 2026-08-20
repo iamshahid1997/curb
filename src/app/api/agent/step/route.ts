@@ -36,12 +36,18 @@ export const maxDuration = 60;
  */
 const MODEL_CHAIN = process.env.CURB_MODEL
   ? [process.env.CURB_MODEL]
-  : [
-      "gemini-3.5-flash",
-      "gemini-3.6-flash",
-      "gemini-3.5-flash-lite",
-      "gemini-3.7-flash",
-    ];
+  : ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash"];
+
+/**
+ * Deliberately excluded from the chain: gemini-3.5-flash-lite.
+ *
+ * It answers, so falling through to it looks like graceful degradation. In
+ * practice it completed a run with zero findings and no patch on a component
+ * with eight real defects — a confident empty audit, which is the single worst
+ * output this tool can produce. An honest "quota exhausted, watch a recorded
+ * run or add your own key" is strictly better than a clean bill of health that
+ * is wrong. Capability is a correctness requirement here, not a preference.
+ */
 
 /** Worth retrying on the next model rather than failing the run. */
 function isTransient(message: string): boolean {
