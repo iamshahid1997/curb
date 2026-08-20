@@ -23,15 +23,25 @@ export const maxDuration = 60;
 /**
  * Tried in order until one answers.
  *
- * Free-tier model availability is genuinely unstable: gemini-3.7-flash returns
- * 503 "high demand" intermittently, and gemini-2.5-flash is now 404 for new
- * accounts. A demo that dies because one model is busy is not a demo, so we
- * fall back rather than pick a favourite. CURB_MODEL pins a single model when
- * you want determinism instead.
+ * Free-tier availability is genuinely unstable — 3.7-flash returns 503 "high
+ * demand" intermittently, 2.x models are now 404 for new accounts — so a demo
+ * that pins one model dies for reasons that have nothing to do with the demo.
+ *
+ * Crucially, the free-tier quota is PER MODEL, and it is small: gemini-3.6-flash
+ * allows 20 requests/day, which one afternoon of testing exhausts. Falling
+ * through on quota is therefore correct rather than wasteful, and multiplies the
+ * daily budget by the length of this chain.
+ *
+ * CURB_MODEL pins a single model when you want determinism instead.
  */
 const MODEL_CHAIN = process.env.CURB_MODEL
   ? [process.env.CURB_MODEL]
-  : ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.7-flash"];
+  : [
+      "gemini-3.5-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.7-flash",
+    ];
 
 /** Worth retrying on the next model rather than failing the run. */
 function isTransient(message: string): boolean {
@@ -179,6 +189,7 @@ export async function POST(request: Request) {
   const google = createGoogleGenerativeAI({ apiKey });
   const started = Date.now();
   const attempted: string[] = [];
+  const quotaExhausted: string[] = [];
   let lastError = "";
 
   for (const modelId of MODEL_CHAIN) {
@@ -213,17 +224,29 @@ export async function POST(request: Request) {
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
 
-      // Quota is not transient — falling through to another model on the same
-      // key would just burn another request against the same exhausted budget.
+      // Quota is metered per model, so an exhausted one says nothing about the
+      // next. Keep going; only give up once every model in the chain is spent.
       if (/quota|RESOURCE_EXHAUSTED|429/i.test(lastError)) {
-        return NextResponse.json(
-          { error: lastError, code: "quota-exhausted", attempted },
-          { status: 429 },
-        );
+        quotaExhausted.push(modelId);
+        continue;
       }
 
       if (!isTransient(lastError)) break;
     }
+  }
+
+  if (quotaExhausted.length === attempted.length && attempted.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          `Free-tier quota is exhausted on every available model ` +
+          `(${quotaExhausted.join(", ")}). Add your own API key to continue, or ` +
+          `explore a recorded run — replays cost nothing.`,
+        code: "quota-exhausted",
+        attempted,
+      },
+      { status: 429 },
+    );
   }
 
   return NextResponse.json(

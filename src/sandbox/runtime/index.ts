@@ -18,6 +18,7 @@ import {
   type CommandEnvelope,
   type DriveAction,
   type DriveResult,
+  type MeasureBoxesResult,
   type MountResult,
   type PingResult,
   type ResponseEnvelope,
@@ -376,6 +377,46 @@ async function handleAxe(scope?: string): Promise<AxeResult> {
   };
 }
 
+/**
+ * Measure elements for the host's overlay layer.
+ *
+ * Coordinates are relative to the sandbox viewport. The host scales them into
+ * its own space using the reported viewport size and the iframe's rect, which
+ * is the only way to draw on top of a frame it cannot read into.
+ */
+function measureBoxes(selectors: string[]): MeasureBoxesResult {
+  const boxes = selectors.slice(0, 200).map((selector) => {
+    let el: Element | null = null;
+    try {
+      el = document.querySelector(selector);
+    } catch {
+      el = null;
+    }
+
+    if (!el) {
+      return { selector, found: false, x: 0, y: 0, width: 0, height: 0 };
+    }
+
+    const rect = el.getBoundingClientRect();
+    return {
+      selector,
+      found: true,
+      x: Math.round(rect.left + window.scrollX),
+      y: Math.round(rect.top + window.scrollY),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  });
+
+  return {
+    boxes,
+    viewport: {
+      width: document.documentElement.clientWidth,
+      height: document.documentElement.clientHeight,
+    },
+  };
+}
+
 function handlePing(): PingResult {
   return { version: PROTOCOL_VERSION, mounted };
 }
@@ -414,6 +455,9 @@ async function dispatch(envelope: CommandEnvelope): Promise<unknown> {
     case "analyze_source":
       // Pure function of the source text — deliberately does not requireMounted.
       return analyzeSource(command.source);
+    case "measure_boxes":
+      requireMounted();
+      return measureBoxes(command.selectors);
     default: {
       const exhaustive: never = command;
       throw new Error(`Unknown command: ${JSON.stringify(exhaustive)}`);

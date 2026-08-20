@@ -27,6 +27,7 @@ import {
   summarizeCorrelations,
   type CorrelationCandidate,
 } from "./correlate";
+import { waitForVisible } from "@/lib/visibility";
 import { buildInitialUserMessage } from "./prompt";
 import {
   summarizeAxe,
@@ -45,6 +46,7 @@ import type {
 } from "./types";
 
 const MAX_STEPS = 24;
+const MAX_MESSAGES = 55;
 const MAX_PATCH_ATTEMPTS = 3;
 
 interface ModelMessageLike {
@@ -534,6 +536,48 @@ export async function runAudit(options: RunOptions): Promise<RunRecord> {
       if (outcome.findings) break;
     }
 
+    // A run that patches and then stops has done the work but produced no
+    // report. Rather than showing an empty findings panel, ask once, explicitly.
+    if (!outcome.findings && messages.length < MAX_MESSAGES) {
+      emit({ type: "phase", at: Date.now(), phase: "reporting" });
+
+      messages.push({
+        role: "user",
+        content:
+          "Now call report_findings with everything you found, including anything " +
+          "you already fixed. Set caughtByAxe true only for issues that appeared in " +
+          "the axe output you were shown.",
+      });
+
+      try {
+        const closing = await callStep(messages, apiKey, signal);
+        record.modelCalls += 1;
+
+        emit({
+          type: "model-response",
+          at: Date.now(),
+          step: MAX_STEPS,
+          text: closing.text,
+          toolCalls: closing.toolCalls.length,
+          ms: closing.ms,
+        });
+
+        for (const call of closing.toolCalls) {
+          if (call.toolName !== "report_findings") continue;
+          emit({
+            type: "tool-call",
+            at: Date.now(),
+            step: MAX_STEPS,
+            tool: call.toolName,
+            input: call.input,
+          });
+          await executeTool(call.toolName, call.input);
+        }
+      } catch {
+        // A failed closing request must not discard a completed audit.
+      }
+    }
+
     record.findings = outcome.findings ?? [];
     record.verification = outcome.verification;
     record.finishedAt = Date.now();
@@ -552,60 +596,6 @@ export async function runAudit(options: RunOptions): Promise<RunRecord> {
     emit({ type: "run-failed", at: Date.now(), error: message });
     throw Object.assign(err instanceof Error ? err : new Error(message), { record });
   }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Visibility                                                                 */
-/* -------------------------------------------------------------------------- */
-
-const VISIBILITY_TIMEOUT_MS = 120_000;
-
-/**
- * Resolve once the document is visible.
- *
- * A hidden document has no layout, and probing it produces false negatives
- * rather than errors — every focusable element measures 0x0 and drops out. The
- * sandbox refuses to probe in that state, so the loop waits here instead of
- * burning the run. Bounded, so a permanently hidden page fails rather than
- * hanging forever.
- */
-function waitForVisible(signal: AbortSignal | undefined): Promise<void> {
-  if (typeof document === "undefined" || document.visibilityState === "visible") {
-    return Promise.resolve();
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    const cleanup = () => {
-      document.removeEventListener("visibilitychange", onChange);
-      signal?.removeEventListener("abort", onAbort);
-      clearTimeout(timer);
-    };
-
-    const onChange = () => {
-      if (document.visibilityState === "visible") {
-        cleanup();
-        resolve();
-      }
-    };
-
-    const onAbort = () => {
-      cleanup();
-      reject(new Error("Run cancelled while waiting for the page to become visible."));
-    };
-
-    const timer = setTimeout(() => {
-      cleanup();
-      reject(
-        new Error(
-          "The page stayed hidden for two minutes, so the run was stopped. " +
-            "Probes that depend on layout cannot run in a background tab.",
-        ),
-      );
-    }, VISIBILITY_TIMEOUT_MS);
-
-    document.addEventListener("visibilitychange", onChange);
-    signal?.addEventListener("abort", onAbort);
-  });
 }
 
 /* -------------------------------------------------------------------------- */

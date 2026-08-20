@@ -58,6 +58,12 @@ export type SandboxCommand =
   | { type: "trace_focus_order"; maxTabs?: number }
   /** Static AST facts about the source. Pure — needs no mounted component. */
   | { type: "analyze_source"; source: string }
+  /**
+   * Bounding boxes for the given selectors, in sandbox viewport coordinates.
+   * The host cannot read into an opaque-origin frame, so overlays are only
+   * possible because the sandbox measures and reports.
+   */
+  | { type: "measure_boxes"; selectors: string[] }
   /** Liveness check. Used by the watchdog. */
   | { type: "ping" };
 
@@ -130,6 +136,21 @@ export interface AxeResult {
   violations: AxeViolation[];
   passCount: number;
   incompleteCount: number;
+}
+
+export interface MeasuredBox {
+  selector: string;
+  found: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface MeasureBoxesResult {
+  boxes: MeasuredBox[];
+  /** Sandbox viewport size, so the host can scale into its own coordinates. */
+  viewport: { width: number; height: number };
 }
 
 export interface PingResult {
@@ -212,6 +233,7 @@ export interface ResultMap {
   transcribe_screen_reader: TranscriptResult;
   trace_focus_order: FocusOrderResult;
   analyze_source: SourceFacts;
+  measure_boxes: MeasureBoxesResult;
   ping: PingResult;
 }
 

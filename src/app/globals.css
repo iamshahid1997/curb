@@ -1,26 +1,171 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/**
+ * Curb design tokens.
+ *
+ * Light palette on bare :root, dark redefined under both the media query and an
+ * explicit [data-theme] so a toggle wins in either direction. Every colour is
+ * defined once in the light block — nothing gets its only definition inside a
+ * conditional.
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --bg: #fbfbfa;
+  --bg-raised: #ffffff;
+  --bg-sunken: #f2f2f0;
+  --border: #e2e2df;
+  --border-strong: #cfcfca;
+
+  --text: #1a1a18;
+  --text-muted: #63635e;
+  --text-faint: #8c8c86;
+
+  --accent: #1f6feb;
+  --accent-text: #ffffff;
+
+  --critical: #b42318;
+  --critical-bg: #fef3f2;
+  --serious: #b54708;
+  --serious-bg: #fffaeb;
+  --moderate: #7a5af8;
+  --moderate-bg: #f4f3ff;
+  --minor: #475467;
+  --minor-bg: #f8f9fc;
+
+  --correlation: #6941c6;
+  --correlation-bg: #f4f3ff;
+  --correlation-border: #d9d6fe;
+
+  --ok: #067647;
+  --ok-bg: #ecfdf3;
+
+  --code-bg: #f7f7f5;
+
+  --radius: 8px;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --bg: #0c0c0d;
+    --bg-raised: #151517;
+    --bg-sunken: #09090a;
+    --border: #26262a;
+    --border-strong: #3a3a40;
+
+    --text: #ededef;
+    --text-muted: #a1a1aa;
+    --text-faint: #71717a;
+
+    --accent: #4d8ef7;
+    --accent-text: #06121f;
+
+    --critical: #ff8a80;
+    --critical-bg: #2a1210;
+    --serious: #fdb022;
+    --serious-bg: #2a1c08;
+    --moderate: #b8a6ff;
+    --moderate-bg: #1c162e;
+    --minor: #a0a3ad;
+    --minor-bg: #17181c;
+
+    --correlation: #c3b5fd;
+    --correlation-bg: #1b1630;
+    --correlation-border: #3f3070;
+
+    --ok: #6ce9a6;
+    --ok-bg: #0a2119;
+
+    --code-bg: #101012;
   }
 }
 
+:root[data-theme="dark"] {
+  --bg: #0c0c0d;
+  --bg-raised: #151517;
+  --bg-sunken: #09090a;
+  --border: #26262a;
+  --border-strong: #3a3a40;
+
+  --text: #ededef;
+  --text-muted: #a1a1aa;
+  --text-faint: #71717a;
+
+  --accent: #4d8ef7;
+  --accent-text: #06121f;
+
+  --critical: #ff8a80;
+  --critical-bg: #2a1210;
+  --serious: #fdb022;
+  --serious-bg: #2a1c08;
+  --moderate: #b8a6ff;
+  --moderate-bg: #1c162e;
+  --minor: #a0a3ad;
+  --minor-bg: #17181c;
+
+  --correlation: #c3b5fd;
+  --correlation-bg: #1b1630;
+  --correlation-border: #3f3070;
+
+  --ok: #6ce9a6;
+  --ok-bg: #0a2119;
+
+  --code-bg: #101012;
+}
+
+html {
+  color-scheme: light dark;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Focus: never removed, only replaced. This tool would flag that. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Honour the preference this tool reports on. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes curb-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.curb-live-dot {
+  animation: curb-pulse 1.4s ease-in-out infinite;
+}
+
+/* Screen-reader-only text, used for live-region announcements. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
