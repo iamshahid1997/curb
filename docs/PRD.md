@@ -1,6 +1,6 @@
 # Curb — Product Requirements Document
 
-**Status:** Draft v0.1 — awaiting sign-off
+**Status:** v0.2 — signed off; corrections folded in from the build
 **Author:** Shahid Ansari
 **Last updated:** 2026-08-20
 
@@ -94,6 +94,8 @@ Three structural gaps make the loop worse than it looks:
 | **CodeRabbit / Greptile** | Broad agentic PR review | General purpose; no deterministic a11y/perf oracle, so findings are unverified opinion |
 | **Accessibility overlays** | — | Actively harmful; named here as an anti-pattern Curb must not resemble |
 
+**Correction (build log).** An earlier draft of this comparison claimed positive `tabindex` was something rule engines miss. It is not — axe reports it as `serious`. The claim has been removed. The genuine misses are semantic (meaningless names), interactional (states never rendered), and structural (mouse-only handlers React attaches synthetically).
+
 **Honest assessment.** Deque is the serious incumbent and out-detects Curb on rule coverage; that is not the axis Curb competes on. Curb's defensible position is the **verified remediation loop** and the **coupled a11y↔perf analysis**. If Deque shipped autonomous verified patching tomorrow, Curb's differentiation would reduce to the coupling analysis alone.
 
 ---
@@ -184,11 +186,12 @@ The differentiating analysis. Each rule pairs a performance decision with the ac
 | C3 | Skeleton screen fixes CLS but is read aloud as content; no `aria-busy` | Loading-state swap + SR transcript contains skeleton text | Runtime-verifiable |
 | C4 | Visually ready but not operable — paint completes before handlers attach | Time gap between paint and first successfully handled synthetic keydown | Runtime-verifiable |
 | C5 | LCP-candidate image carries `loading="lazy"` | Largest paint candidate + `loading` attribute | Runtime-verifiable |
-| C6 | Focus lost to `<body>` after route/state change | `activeElement` after `drive()` | Runtime-verifiable |
 | C7 | Animation without `prefers-reduced-motion` guard — vestibular risk and main-thread cost | AST + computed style | Heuristic |
 | C8 | Icon barrel import ships whole set; icons also unlabelled | Import analysis + missing accessible names | Heuristic |
 
-**Honest status.** These eight rules were derived from reasoning about known failure modes, **not from measurement against a corpus.** Their real-world frequency is unvalidated. Validation is a V1 exit criterion (§13): run Curb against a set of real open-source components and publish the observed hit rate, including if it is low. If these prove rare, the correct reframing is "rare but expensive and otherwise undetectable" — not a quiet deletion of the section.
+**Honest status.** These rules were derived from reasoning about known failure modes, **not from measurement against a corpus.** Their real-world frequency is unvalidated. Validation is a V1 exit criterion (§13): run Curb against a set of real open-source components and publish the observed hit rate, including if it is low. If these prove rare, the correct reframing is "rare but expensive and otherwise undetectable" — not a quiet deletion of the section.
+
+**Correction (build log).** A seventh rule, "focus lost to `<body>` after a route or state change", was listed here in v0.1. It has been removed: it is a plain accessibility defect with no performance side, so it does not belong in a catalogue whose entire claim is that these failures are *coupled*. It is still detected and reported — as an ordinary a11y finding, which is what it is. Keeping it here would have inflated the count of the one thing this product uniquely claims.
 
 ---
 
