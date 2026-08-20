@@ -132,6 +132,8 @@ export class PageDriver {
     projectRoot: string;
     headless?: boolean;
     viewport?: { width: number; height: number };
+    /** Themes fail differently; a light-only audit misses half the contrast bugs. */
+    colorScheme?: "light" | "dark";
   }): Promise<PageDriver> {
     const { chromium } = await import("playwright");
 
@@ -141,6 +143,7 @@ export class PageDriver {
       // Audit the default experience, not a reduced-motion one — C7 depends on
       // observing that animations are unguarded.
       reducedMotion: "no-preference",
+      colorScheme: options.colorScheme ?? "light",
     });
 
     const page = await context.newPage();
